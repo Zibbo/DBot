@@ -1,4 +1,5 @@
 import os
+import importlib.util
 import discord
 import asyncio
 import logging
@@ -7,14 +8,18 @@ from discord import app_commands
 from discord.ext import commands, voice_recv, tasks
 from openai import OpenAI
 from dotenv import load_dotenv
-from cfg import DISCORD_TOKEN, OPENAI_API_KEY
+
+if importlib.util.find_spec("config") is None:
+    raise ImportError("Missing config.py. Copy config.example.py to config.py and fill in your settings.")
+
+from config import DISCORD_TOKEN, OPENAI_API_KEY, TRIGGER_WORDS
 # 1. SETUP
 logging.getLogger("discord.ext.voice_recv.reader").setLevel(logging.ERROR)
 logging.getLogger("discord.ext.voice_recv.gateway").setLevel(logging.ERROR)
 
 load_dotenv()
 
-TRIGGER_WORD = "computer"
+TRIGGER_WORDS = [word.lower() for word in TRIGGER_WORDS]
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 intents = discord.Intents.default()
@@ -109,25 +114,29 @@ async def process_audio(user, audio_data, voice_client, channel):
         
         print(f"📝 Heard: '{transcript}'")
 
-        if TRIGGER_WORD in transcript:
-            query = transcript.replace(TRIGGER_WORD, "").strip()
-            if not query: return
+        matched_trigger = next((word for word in TRIGGER_WORDS if word in transcript), None)
+
+        if matched_trigger:
+            query = transcript.replace(matched_trigger, "", 1).strip()
+            if not query:
+                return
 
             await channel.send(f"**Heard:** {query}")
-            
+
             response = openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": query}]
             )
             reply = response.choices[0].message.content
             print(f"🤖 Reply: {reply}")
-            
+
             tts_file = "reply.mp3"
             openai_client.audio.speech.create(
                 model="tts-1", voice="alloy", input=reply
             ).stream_to_file(tts_file)
 
-            if voice_client.is_playing(): voice_client.stop()
+            if voice_client.is_playing():
+                voice_client.stop()
             voice_client.play(discord.FFmpegPCMAudio(tts_file))
 
     except Exception as e:
