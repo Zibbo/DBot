@@ -97,7 +97,7 @@ async def process_audio(user, audio_data, voice_client, channel):
     os.system(f"ffmpeg -f s16le -ar 48000 -ac 2 -i {pcm_file} {wav_file} -y > /dev/null 2>&1")
     
     try:
-        if os.path.getsize(wav_file) < 20000: # ~1 second of audio
+        if os.path.getsize(wav_file) < 40000: # ~2 seconds of audio
             print("⚠️ Audio too short/noise, ignoring.")
             return
 
